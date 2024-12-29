@@ -1,37 +1,86 @@
-// HistoryPage.js
 import React, { useState, useEffect } from 'react';
 import { format } from 'date-fns';
 import HistoricalChart from "../Components/HistoricalChart";
+import AverageTemperatureHumidityChart from "../Components/AvarageChart"; // Import the new chart component
 import axios from 'axios';
+
 export default function HistoryPage() {
-    const [timeRange, setTimeRange] = useState('24h');
+    const [historicalTimeRange, setHistoricalTimeRange] = useState('24h'); // Time range for historical chart
+    const [averageTimeRange, setAverageTimeRange] = useState('30d'); // Time range for average chart
     const [data, setData] = useState([]);
+    const [filteredData, setFilteredData] = useState([]); // State for filtered data
     const [loading, setLoading] = useState(true);
     const [startDate, setStartDate] = useState('');
     const [endDate, setEndDate] = useState('');
+    const [averageStartDate, setAverageStartDate] = useState(''); // Start date for average chart
+    const [averageEndDate, setAverageEndDate] = useState(''); // End date for average chart
     const [view, setView] = useState('chart'); // 'chart' or 'table'
+
     const fetchData = async () => {
-        try{
-            const response= await axios.get("http://localhost:3000/api/sensor-data");
-            const data=response.data;
+        try {
+            const response = await axios.get("http://localhost:3000/api/sensor-data");
+            const data = response.data;
             setData(data);
-        } catch (e){
+            filterData(data); // Filter data after fetching
+        } catch (e) {
             console.error(e);
         }
+    };
 
-    }
+    const filterData = (data) => {
+        let filtered = data;
 
-    // Giả lập dữ liệu - thay thế bằng API call thực tế
+        // Filter based on historicalTimeRange
+        const now = new Date();
+        if (historicalTimeRange === '24h') {
+            const yesterday = new Date(now.getTime() - 24 * 60 * 60 * 1000);
+            filtered = data.filter(record => new Date(record.timestamp) >= yesterday);
+        } else if (historicalTimeRange === '7d') {
+            const sevenDaysAgo = new Date(now.getTime() - 7 * 24 * 60 * 60 * 1000);
+            filtered = data.filter(record => new Date(record.timestamp) >= sevenDaysAgo);
+        } else if (historicalTimeRange === '30d') {
+            const thirtyDaysAgo = new Date(now.getTime() - 30 * 24 * 60 * 60 * 1000);
+            filtered = data.filter(record => new Date(record.timestamp) >= thirtyDaysAgo);
+        } else if (historicalTimeRange === 'custom' && startDate && endDate) {
+            filtered = data.filter(record => {
+                const recordDate = new Date(record.timestamp);
+                return recordDate >= new Date(startDate) && recordDate <= new Date(endDate);
+            });
+        }
+
+        setFilteredData(filtered); // Update the filtered data state
+    };
+
+    const filterAverageData = (data) => {
+        let averageFiltered = data;
+
+        // Filter based on averageTimeRange
+        const now = new Date();
+        if (averageTimeRange === '7d') {
+            const sevenDaysAgo = new Date(now.getTime() - 7 * 24 * 60 * 60 * 1000);
+            averageFiltered = data.filter(record => new Date(record.timestamp) >= sevenDaysAgo);
+        } else if (averageTimeRange === '30d') {
+            const thirtyDaysAgo = new Date(now.getTime() - 30 * 24 * 60 * 60 * 1000);
+            averageFiltered = data.filter(record => new Date(record.timestamp) >= thirtyDaysAgo);
+        } else if (averageTimeRange === 'custom' && averageStartDate && averageEndDate) {
+            averageFiltered = data.filter(record => {
+                const recordDate = new Date(record.timestamp);
+                return recordDate >= new Date(averageStartDate) && recordDate <= new Date(averageEndDate);
+            });
+        }
+
+        return averageFiltered; // Return the filtered average data
+    };
+
     useEffect(() => {
         setLoading(true);
-        // Simulate API call
-        setTimeout(() => {
-            fetchData()
-            setLoading(false);
-        }, 1000);
-    }, [timeRange, startDate, endDate]);
+        fetchData();
+        setLoading(false);
+    }, []);
 
-
+    useEffect(() => {
+        filterData(data); // Re-filter data when historicalTimeRange or dates change
+    }, [historicalTimeRange, startDate, endDate, data]);
 
     const timeRangeOptions = [
         { value: '24h', label: 'Last 24 Hours' },
@@ -40,8 +89,14 @@ export default function HistoryPage() {
         { value: 'custom', label: 'Custom Range' }
     ];
 
+    const averageTimeRangeOptions = [
+        { value: '7d', label: 'Last 7 Days' },
+        { value: '30d', label: 'Last 30 Days' },
+        { value: 'custom', label: 'Custom Range' }
+    ];
+
     return (
-        <div className="container mx-auto p-4">
+        <div className="container mx-auto p-4 flex flex-col gap-5">
             <div className="bg-white rounded-lg shadow-lg p-6">
                 {/* Header */}
                 <div className="mb-6">
@@ -53,11 +108,11 @@ export default function HistoryPage() {
                 <div className="flex flex-wrap gap-4 mb-6">
                     <div className="flex-1">
                         <label className="block text-sm font-medium text-gray-700 mb-2">
-                            Time Range
+                            Historical Time Range
                         </label>
                         <select
-                            value={timeRange}
-                            onChange={(e) => setTimeRange(e.target.value)}
+                            value={historicalTimeRange}
+                            onChange={(e) => setHistoricalTimeRange(e.target.value)}
                             className="w-full border border-gray-300 rounded-md px-3 py-2"
                         >
                             {timeRangeOptions.map(option => (
@@ -68,7 +123,7 @@ export default function HistoryPage() {
                         </select>
                     </div>
 
-                    {timeRange === 'custom' && (
+                    {historicalTimeRange === 'custom' && (
                         <>
                             <div className="flex-1">
                                 <label className="block text-sm font-medium text-gray-700 mb-2">
@@ -135,13 +190,71 @@ export default function HistoryPage() {
                 {!loading && (
                     <>
                         {view === 'chart' ? (
-                            <HistoricalChart
-                                data={data}
-                                title="Temperature & Humidity History"
-                                metrics={['temperature', 'humidity']}
-                                timeRange={timeRange}
-                                height={400}
-                            />
+                            <>
+                                <HistoricalChart
+                                    data={filteredData} // Use filtered data
+                                    title="Temperature & Humidity History"
+                                    metrics={['temperature', 'humidity']}
+                                    timeRange={historicalTimeRange} // Use historical time range
+                                    height={400}
+                                />
+
+                                <div className="text-2xl font-bold text-gray-800">Average chart:</div>
+                                {/* Average Time Range Control */}
+                                <div className="flex flex-wrap gap-4 mb-6">
+                                    <div className="flex-1">
+                                        <label className="block text-sm font-medium text-gray-700 mb-2">
+                                            Average Time Range
+                                        </label>
+                                        <select
+                                            value={averageTimeRange}
+                                            onChange={(e) => setAverageTimeRange(e.target.value)}
+                                            className="w-full border border-gray-300 rounded-md px-3 py-2"
+                                        >
+                                            {averageTimeRangeOptions.map(option => (
+                                                <option key={option.value} value={option.value}>
+                                                    {option.label}
+                                                </option>
+                                            ))}
+                                        </select>
+                                    </div>
+                                </div>
+
+                                {/* Custom Date Range for Average Chart */}
+                                {averageTimeRange === 'custom' && (
+                                    <div className="flex flex-wrap gap-4 mb-6">
+                                        <div className="flex-1">
+                                            <label className="block text-sm font-medium text-gray-700 mb-2">
+                                                Average Start Date
+                                            </label>
+                                            <input
+                                                type="date"
+                                                value={averageStartDate}
+                                                onChange={(e) => setAverageStartDate(e.target.value)}
+                                                className="w-full border border-gray-300 rounded-md px-3 py-2"
+                                            />
+                                        </div>
+                                        <div className="flex-1">
+                                            <label className="block text-sm font-medium text-gray-700 mb-2">
+                                                Average End Date
+                                            </label>
+                                            <input
+                                                type="date"
+                                                value={averageEndDate}
+                                                onChange={(e) => setAverageEndDate(e.target.value)}
+                                                className="w-full border border-gray-300 rounded-md px-3 py-2"
+                                            />
+                                        </div>
+                                    </div>
+                                )}
+
+                                <AverageTemperatureHumidityChart
+                                    data={filterAverageData(data)} // Use original data for average
+                                    timeRange={averageTimeRange === '30d' ? 'month' : 'day'} // Adjust time range for averages
+                                    averageStartDate={averageStartDate} // Pass custom start date
+                                    averageEndDate={averageEndDate} // Pass custom end date
+                                />
+                            </>
                         ) : (
                             <div className="overflow-x-auto">
                                 <table className="min-w-full divide-y divide-gray-200">
@@ -159,7 +272,7 @@ export default function HistoryPage() {
                                     </tr>
                                     </thead>
                                     <tbody className="bg-white divide-y divide-gray-200">
-                                    {data.map((record, index) => (
+                                    {filteredData.map((record, index) => (
                                         <tr key={index}>
                                             <td className="px-6 py-4 whitespace-nowrap">
                                                 {format(new Date(record.timestamp), 'yyyy-MM-dd HH:mm')}
